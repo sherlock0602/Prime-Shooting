@@ -332,7 +332,7 @@
         else { do { value = Math.floor(Math.random() * 100); } while (isPrime(value)); }
         
         // 降低基礎速度與隨機範圍，使整體偏慢
-        let fallSpeed = (0.8 + Math.random() * 1.5) * speedMultiplier;
+        let fallSpeed = (0.7 + Math.random() * 1.2) * speedMultiplier;
         enemies.push({ x: Math.random() * (canvas.width - 60) + 30, y: -30, r: 26, speed: fallSpeed, value: value });
     }
 
