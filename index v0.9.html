@@ -25,27 +25,31 @@
     button.ui-btn { padding: 12px 24px; font-size: 24px; cursor: pointer; border-radius: 8px; border: none; background: #00E5FF; color: black; font-weight: bold; transition: 0.2s; }
     button.ui-btn:hover { background: #00b3cc; box-shadow: 0 0 15px #00E5FF; }
     
-    /* 触摸控制区域 */
+    /* 觸控相關設定 */
     .touch-controls {
-      position: absolute; bottom: 20px;
-      width: 100%;
-      display: none; /* 在平板/手機裝置才顯示 */
-      justify-content: space-between;
-      align-items: flex-end;
-      padding: 0 30px;
-      box-sizing: border-box;
-      z-index: 1;
-      pointer-events: none; /* 讓點擊可以穿透空白處 */
+      position: absolute; bottom: 20px; right: 20px;
+      display: none; /* 平板/手機裝置才顯示 */
+      z-index: 10;
+      pointer-events: none; /* 讓容器不阻擋點擊 */
     }
     
-    /* 半透明虛擬搖桿 */
+    /* 左半邊螢幕的隱形感應區，用來觸發動態搖桿 */
+    #joystick-zone {
+      position: absolute; top: 0; left: 0; width: 50%; height: 100%;
+      z-index: 5; display: none; touch-action: none;
+    }
+
+    /* 動態浮動搖桿 */
     #joystick-container {
       width: 120px; height: 120px;
       border-radius: 50%;
       background: rgba(0, 229, 255, 0.15);
       border: 2px solid rgba(0, 229, 255, 0.5);
-      position: relative;
-      pointer-events: auto;
+      position: absolute;
+      z-index: 6;
+      display: none; /* 手指按下前隱藏 */
+      pointer-events: none; 
+      transform: translate(-50%, -50%); /* 確保搖桿中心對準手指 */
     }
     
     #joystick-knob {
@@ -56,7 +60,6 @@
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      pointer-events: none;
     }
     
     .shoot-btn {
@@ -65,10 +68,9 @@
       background: rgba(255, 59, 59, 0.4);
       border: 2px solid rgba(255, 59, 59, 0.8);
       color: white; font-weight: bold; font-size: 22px;
-      pointer-events: auto;
+      pointer-events: auto; /* 按鈕本身需要感應點擊 */
       box-shadow: 0 0 15px rgba(255, 59, 59, 0.5);
     }
-    
     .shoot-btn:active { background: rgba(255, 59, 59, 0.7); }
     
     .keyboard-hint {
@@ -87,7 +89,8 @@
     .low-count { color: #FF3B3B; }
     
     @media (pointer: coarse) {
-      .touch-controls { display: flex !important; }
+      .touch-controls { display: block !important; }
+      #joystick-zone { display: block !important; }
       .keyboard-hint { display: none; }
     }
   </style>
@@ -111,7 +114,7 @@
  
     <div class="controls-info">
       <p>💻 電腦：[滑鼠] 移動點擊，或 [方向鍵] 移動與 [空白鍵] 射擊</p>
-      <p>📱 平板：[左側搖桿] 全方位移動，[右側按鈕] 射擊 (可長按)</p>
+      <p>📱 平板：[左側螢幕] 動態搖桿移動，[右側按鈕] 射擊 (可長按)</p>
       <p>⚠️ 終極挑戰：最後30秒，巨大 Boss 降臨，只有質數時能造成傷害！</p>
     </div>
   </div>
@@ -120,11 +123,13 @@
     分數：<span id="score">0</span> ｜ Combo：<span id="combo">0</span> ｜ 武器：<span id="weaponName">普通</span> ｜ 剩餘時間：<span id="timeLeft">180</span> 秒
   </div>
   
-  <!-- 觸控控制區 (搖桿 + 射擊) -->
+  <!-- 動態搖桿與射擊按鈕 -->
+  <div id="joystick-zone"></div>
+  <div id="joystick-container">
+      <div id="joystick-knob"></div>
+  </div>
+  
   <div class="touch-controls">
-    <div id="joystick-container">
-        <div id="joystick-knob"></div>
-    </div>
     <button class="shoot-btn" id="shootButton">射擊</button>
   </div>
   
@@ -151,16 +156,20 @@
     const submitScoreBtn = document.getElementById('submitScoreBtn');
     const leaderboardList = document.getElementById('leaderboardList');
     
-    const joystickArea = document.getElementById('joystick-container');
+    const joystickZone = document.getElementById('joystick-zone');
+    const joystickContainer = document.getElementById('joystick-container');
     const joystickKnob = document.getElementById('joystick-knob');
     const API_URL = 'http://10.196.54.156:3000/api'; 
 
     // --- 1. 遊戲狀態與變數 ---
     let isPlaying = false; 
-    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 8 };
+    // 下調移動速度 (8 -> 4.5)
+    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 4.5 };
     let bullets = []; let enemies = []; let stars = []; let particles = []; let floatingTexts = [];
     let score = 0; let combo = 0; let isShooting = false;
-    let shootCooldown = 0; const SHOOT_RATE = 10; 
+    
+    // 下調射速 (10 -> 22，約每秒不到3發)
+    let shootCooldown = 0; const SHOOT_RATE = 22; 
     let weapon = 'normal'; let weaponTimer = 0; const WEAPON_DURATION = 300;
     let gameTimer; let timeLeft = 180;
     let useColorCoding = true; let colorAssistWarned = false;
@@ -227,7 +236,7 @@
     submitScoreBtn.addEventListener('click', submitScore);
     document.addEventListener('DOMContentLoaded', showLeaderboard);
 
-    // --- 輸入控制綁定 (含滑鼠回歸) ---
+    // --- 輸入控制綁定 ---
     // 鍵盤
     document.addEventListener('keydown', e => {
       if (!isPlaying) return;
@@ -239,13 +248,12 @@
       if(e.key === ' ') isShooting = false;
     });
 
-    // 滑鼠 (移動與點擊)
+    // 滑鼠
     canvas.addEventListener('mousemove', e => {
       if (!isPlaying || joyActive) return;
       const rect = canvas.getBoundingClientRect();
       player.x = e.clientX - rect.left;
       let targetY = e.clientY - rect.top;
-      // 限制只能在下半部活動
       if (targetY < canvas.height / 2) targetY = canvas.height / 2;
       player.y = targetY;
     });
@@ -253,21 +261,27 @@
     canvas.addEventListener('mouseup', e => { e.preventDefault(); isShooting = false; });
     canvas.addEventListener('mouseleave', e => { isShooting = false; });
 
-    // 觸控按鈕
+    // 觸控射擊
     const setShooting = (e, val) => { e.preventDefault(); if(isPlaying) isShooting = val; };
     shootButton.addEventListener('touchstart', e => setShooting(e, true), {passive: false});
     shootButton.addEventListener('touchend', e => setShooting(e, false), {passive: false});
     shootButton.addEventListener('mousedown', e => setShooting(e, true));
     shootButton.addEventListener('mouseup', e => setShooting(e, false));
 
-    // 虛擬搖桿
+    // 動態浮動搖桿
     function handleJoystickStart(e) {
         e.preventDefault();
         const touch = e.changedTouches[0];
-        const rect = joystickArea.getBoundingClientRect();
-        joyCenter.x = rect.left + rect.width / 2;
-        joyCenter.y = rect.top + rect.height / 2;
+        // 以手指按下的地方作為搖桿原點
+        joyCenter.x = touch.clientX;
+        joyCenter.y = touch.clientY;
         joyActive = true;
+        
+        // 顯示搖桿UI並定位到該位置
+        joystickContainer.style.display = 'block';
+        joystickContainer.style.left = joyCenter.x + 'px';
+        joystickContainer.style.top = joyCenter.y + 'px';
+        
         updateJoystick(touch);
     }
     function handleJoystickMove(e) {
@@ -277,6 +291,8 @@
     function handleJoystickEnd(e) {
         e.preventDefault();
         joyActive = false; joyVector = { x: 0, y: 0 };
+        // 隱藏搖桿並重置內圈位置
+        joystickContainer.style.display = 'none';
         joystickKnob.style.transform = `translate(-50%, -50%)`;
     }
     function updateJoystick(touch) {
@@ -284,13 +300,16 @@
         const distance = Math.hypot(dx, dy); const angle = Math.atan2(dy, dx);
         const clampedDist = Math.min(distance, maxJoyRadius);
         const knobX = Math.cos(angle) * clampedDist; const knobY = Math.sin(angle) * clampedDist;
+        
+        // 內圈位置更新
         joystickKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
         joyVector.x = knobX / maxJoyRadius; joyVector.y = knobY / maxJoyRadius;
     }
-    joystickArea.addEventListener('touchstart', handleJoystickStart, {passive: false});
-    joystickArea.addEventListener('touchmove', handleJoystickMove, {passive: false});
-    joystickArea.addEventListener('touchend', handleJoystickEnd, {passive: false});
-    joystickArea.addEventListener('touchcancel', handleJoystickEnd, {passive: false});
+    
+    joystickZone.addEventListener('touchstart', handleJoystickStart, {passive: false});
+    joystickZone.addEventListener('touchmove', handleJoystickMove, {passive: false});
+    joystickZone.addEventListener('touchend', handleJoystickEnd, {passive: false});
+    joystickZone.addEventListener('touchcancel', handleJoystickEnd, {passive: false});
 
     // --- 遊戲流程 ---
     function startGame() {
@@ -305,9 +324,10 @@
       bullets = []; enemies = []; particles = []; floatingTexts = [];
       player.x = canvas.width / 2; player.y = canvas.height - 80;
       isShooting = false; shootCooldown = 0;
-      joyActive = false; joyVector = {x:0, y:0}; joystickKnob.style.transform = `translate(-50%, -50%)`;
+      joyActive = false; joyVector = {x:0, y:0}; 
+      joystickContainer.style.display = 'none';
       boss.active = false; boss.isDefeated = false;
-      useColorCoding = true; colorAssistWarned = false; // 重置顏色輔助
+      useColorCoding = true; colorAssistWarned = false; 
       
       initPrimeHitCounts();
       updateHUD();
@@ -342,7 +362,8 @@
     }
 
     function shoot() {
-      bullets.push({ x: player.x, y: player.y - 15, dx: 0, dy: -10, r: 5, type: weapon, blinkState: 0, blinkTimer: 0 });
+      // 子彈速度稍微調降 (-10 -> -8) 配合整體節奏
+      bullets.push({ x: player.x, y: player.y - 15, dx: 0, dy: -8, r: 5, type: weapon, blinkState: 0, blinkTimer: 0 });
     }
 
     function createExplosion(x, y, isPrimeVal) {
@@ -378,7 +399,6 @@
     }
 
     function update() {
-      // 玩家移動 (搖桿與鍵盤) - 滑鼠已在監聽器中處理
       if (joyActive) {
           player.x += joyVector.x * player.speed;
           player.y += joyVector.y * player.speed;
@@ -388,29 +408,25 @@
           if (keys.ArrowUp) player.y -= player.speed;
           if (keys.ArrowDown) player.y += player.speed;
       }
-      // 邊界限制
+      
       if (player.x < player.r) player.x = player.r;
       if (player.x > canvas.width - player.r) player.x = canvas.width - player.r;
       if (player.y < canvas.height / 2) player.y = canvas.height / 2; 
       if (player.y > canvas.height - player.r) player.y = canvas.height - player.r;
 
-      // 射擊
       if (shootCooldown > 0) shootCooldown--;
       if (isShooting && shootCooldown <= 0) { shoot(); shootCooldown = SHOOT_RATE; }
 
-      // 武器倒數
       if (weapon !== 'normal') {
           weaponTimer--;
           if (weaponTimer <= 0) { weapon = 'normal'; if(combo>=20) combo=0; updateHUD(); }
       }
 
-      // 顏色輔助關閉警告
       if (timeLeft <= 120 && !colorAssistWarned) {
           useColorCoding = false; colorAssistWarned = true;
           createFloatingText(canvas.width/2, canvas.height/2, "⚠️ 質數顏色輔助已關閉！", "#FFFF00", "30px");
       }
 
-      // 敵人生成與更新
       if (boss.active) {
           boss.x += boss.dx;
           if (boss.x < boss.r + 20 || boss.x > canvas.width - boss.r - 20) boss.dx *= -1;
@@ -436,7 +452,6 @@
       floatingTexts.forEach(ft => { ft.y += ft.dy; ft.life -= 0.015; });
       floatingTexts = floatingTexts.filter(ft => ft.life > 0);
 
-      // ★修復：確保敵人會往下掉
       enemies.forEach(e => e.y += e.speed);
       
       bullets.forEach(b => {
@@ -570,7 +585,7 @@
 
       enemies.forEach(e => {
         let isP = isPrime(e.value);
-        let color = useColorCoding ? (isP ? '#00FF00' : '#FF3B3B') : '#FF3B3B'; // 支援關閉顏色輔助
+        let color = useColorCoding ? (isP ? '#00FF00' : '#FF3B3B') : '#FF3B3B';
         ctx.shadowBlur = 15; ctx.shadowColor = color; ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0; ctx.fillStyle = 'black';
