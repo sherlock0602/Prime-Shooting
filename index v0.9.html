@@ -164,7 +164,7 @@
     // --- 1. 遊戲狀態與變數 ---
     let isPlaying = false; 
     // 下調移動速度 (8 -> 4.5)
-    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 4.5 };
+    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 6 };
     let bullets = []; let enemies = []; let stars = []; let particles = []; let floatingTexts = [];
     let score = 0; let combo = 0; let isShooting = false;
     
@@ -387,7 +387,7 @@
         } else {
           do { value = Math.floor(Math.random() * 100); } while (isPrime(value));
         }
-        enemies.push({ x: Math.random() * (canvas.width - 60) + 30, y: -30, r: 20, speed: (1.5 + Math.random() * 2) * speedMultiplier, value: value });
+        enemies.push({ x: Math.random() * (canvas.width - 60) + 30, y: -30, r: 25, speed: (1.5 + Math.random() * 2) * speedMultiplier, value: value });
     }
 
     function spawnBoss() {
