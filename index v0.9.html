@@ -37,13 +37,29 @@
     .shoot-btn:active { background: rgba(255, 59, 59, 0.7); }
     .keyboard-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: rgba(255, 255, 255, 0.7); font-family: sans-serif; font-size: 14px; z-index: 1; }
     
-    /* 失誤回顧區 */
+    /* 回顧區容器 */
+    .review-container {
+        display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 600px;
+    }
+    
+    /* 失誤回顧 (打到非質數) */
     #mistakeReview {
       margin: 15px 0; padding: 15px; background: rgba(255, 59, 59, 0.2);
-      border: 1px solid #FF3B3B; border-radius: 8px; max-width: 400px; width: 80%; display: none;
+      border: 1px solid #FF3B3B; border-radius: 8px; flex: 1; min-width: 250px; display: none;
     }
+    
+    /* 漏打回顧 (沒打到質數) */
+    #missedReview {
+      margin: 15px 0; padding: 15px; background: rgba(255, 215, 0, 0.2);
+      border: 1px solid #FFD700; border-radius: 8px; flex: 1; min-width: 250px; display: none;
+    }
+
     .mistake-tag {
       display: inline-block; background: #FF3B3B; color: white;
+      padding: 5px 10px; margin: 3px; border-radius: 4px; font-weight: bold;
+    }
+    .missed-tag {
+      display: inline-block; background: #FFD700; color: black;
       padding: 5px 10px; margin: 3px; border-radius: 4px; font-weight: bold;
     }
     
@@ -54,12 +70,20 @@
   <div id="ui">
     <h1 style="text-shadow: 0 0 20px #00E5FF; font-size: 48px; margin-bottom: 10px;">✨ 質數射擊戰 ✨</h1>
     
-    <div id="endGameUI" style="display: none; text-align: center; flex-direction: column; align-items: center;">
+    <div id="endGameUI" style="display: none; text-align: center; flex-direction: column; align-items: center; width: 100%;">
         <h2 id="finalScoreText" style="color: #FFD700; text-shadow: 0 0 10px #FFD700; margin-bottom: 5px;">🎯 遊戲結束！你的分數：0</h2>
         
-        <div id="mistakeReview">
-            <h3 style="margin-top: 0; color: #FFaaaa;">👀 失誤回顧 (非質數)</h3>
-            <div id="mistakeList"></div>
+        <div class="review-container">
+            <!-- 打錯區塊 -->
+            <div id="mistakeReview">
+                <h3 style="margin-top: 0; color: #FFaaaa;">❌ 失誤 (非質數)</h3>
+                <div id="mistakeList"></div>
+            </div>
+            <!-- 漏打區塊 -->
+            <div id="missedReview">
+                <h3 style="margin-top: 0; color: #FFD700;">💨 漏掉的質數</h3>
+                <div id="missedList"></div>
+            </div>
         </div>
 
         <input type="text" id="playerName" placeholder="請輸入名字" style="padding: 10px; font-size: 18px; margin: 10px 0; border-radius: 5px; border: none; text-align: center;">
@@ -83,7 +107,7 @@
   </div>
   
   <div id="hud">
-    分數：<span id="score">0</span> ｜ Combo：<span id="combo">0</span> ｜ 武器：<span id="weaponName">普通</span> ｜ 剩餘時間：<span id="timeLeft">180</span> 秒
+    分數：<span id="score">0</span> ｜ Combo：<span id="combo">0</span> ｜ 武器：<span id="weaponName">普通</span> ｜ 剩餘時間：<span id="timeLeft">0</span> 秒
   </div>
   <button id="pauseBtn">暫停</button>
   
@@ -111,6 +135,8 @@
     const finalScoreText = document.getElementById('finalScoreText');
     const mistakeReview = document.getElementById('mistakeReview');
     const mistakeList = document.getElementById('mistakeList');
+    const missedReview = document.getElementById('missedReview');
+    const missedList = document.getElementById('missedList');
     const playerNameInput = document.getElementById('playerName');
     const submitScoreBtn = document.getElementById('submitScoreBtn');
     const leaderboardList = document.getElementById('leaderboardList');
@@ -120,17 +146,21 @@
     const joystickKnob = document.getElementById('joystick-knob');
     const API_URL = 'http://10.196.54.156:3000/api'; 
 
+    // 💡 遊戲時間總控台 (單位: 秒)
+    const TOTAL_GAME_TIME = 120; 
+
     let isPlaying = false; 
     let isPaused = false;
-    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 6 };
+    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 4.5 };
     let bullets = []; let enemies = []; let stars = []; let particles = []; let floatingTexts = [];
     let score = 0; let combo = 0; let isShooting = false;
     let shootCooldown = 0; const SHOOT_RATE = 22; 
     let weapon = 'normal'; let weaponTimer = 0; const WEAPON_DURATION = 300;
-    let gameTimer; let timeLeft = 180;
+    let gameTimer; let timeLeft = TOTAL_GAME_TIME;
     let useColorCoding = true; let colorAssistWarned = false;
     let enemySpawnTimer = 0; let currentSpawnRate = 80; let speedMultiplier = 1;
-    let mistakes = {}; // 紀錄打錯的數字
+    let mistakes = {}; // 紀錄打錯的非質數
+    let missedPrimes = {}; // 紀錄漏打的質數
 
     let keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
     let joyActive = false; let joyVector = { x: 0, y: 0 }; let joyCenter = { x: 0, y: 0 }; const maxJoyRadius = 40;
@@ -150,7 +180,7 @@
     // 排行榜功能
     async function submitScore() {
         const name = playerNameInput.value.trim();
-        if (!name) return alert('請輸入你的名字！');
+        if (!name) return alert('請輸入名字！');
         try {
             const response = await fetch(`${API_URL}/scores`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -184,10 +214,10 @@
         isPaused = !isPaused;
         pauseBtn.textContent = isPaused ? '▶ 繼續' : '暫停';
         if (!isPaused) {
-            timerLoop(); // 重新啟動計時器
-            requestAnimationFrame(gameLoop); // 重新啟動遊戲迴圈
+            timerLoop(); 
+            requestAnimationFrame(gameLoop); 
         } else {
-            clearInterval(gameTimer); // 停止計時
+            clearInterval(gameTimer); 
         }
     });
 
@@ -254,8 +284,8 @@
       endGameUI.style.display = 'none'; startBtn.style.display = 'none';
       ui.style.display = 'none'; hud.style.display = 'block'; pauseBtn.style.display = 'block';
       
-      score = 0; combo = 0; timeLeft = 180;
-      weapon = 'normal'; weaponTimer = 0; mistakes = {};
+      score = 0; combo = 0; timeLeft = TOTAL_GAME_TIME;
+      weapon = 'normal'; weaponTimer = 0; mistakes = {}; missedPrimes = {};
       bullets = []; enemies = []; particles = []; floatingTexts = [];
       player.x = canvas.width / 2; player.y = canvas.height - 80;
       isShooting = false; shootCooldown = 0; isPaused = false; pauseBtn.textContent = '暫停';
@@ -304,9 +334,21 @@
               span.textContent = `${num} (${mistakes[num]}次)`;
               mistakeList.appendChild(span);
           });
-      } else {
-          mistakeReview.style.display = 'none';
-      }
+      } else { mistakeReview.style.display = 'none'; }
+
+      // 顯示漏打質數回顧
+      missedList.innerHTML = '';
+      const missedNumbers = Object.keys(missedPrimes).map(Number).sort((a,b)=>a-b);
+      if(missedNumbers.length > 0) {
+          missedReview.style.display = 'block';
+          missedNumbers.forEach(num => {
+              const span = document.createElement('span');
+              span.className = 'missed-tag';
+              span.textContent = `${num} (${missedPrimes[num]}次)`;
+              missedList.appendChild(span);
+          });
+      } else { missedReview.style.display = 'none'; }
+
       showLeaderboard();
     }
 
@@ -331,8 +373,7 @@
         if (Math.random() < 0.6) { do { value = Math.floor(Math.random() * 100); } while (!isPrime(value)); } 
         else { do { value = Math.floor(Math.random() * 100); } while (isPrime(value)); }
         
-        // 降低基礎速度與隨機範圍，使整體偏慢
-        let fallSpeed = (0.7 + Math.random() * 1.2) * speedMultiplier;
+        let fallSpeed = (0.8 + Math.random() * 1.5) * speedMultiplier;
         enemies.push({ x: Math.random() * (canvas.width - 60) + 30, y: -30, r: 26, speed: fallSpeed, value: value });
     }
 
@@ -361,7 +402,8 @@
           if (weaponTimer <= 0) { weapon = 'normal'; if(combo>=20) combo=0; updateHUD(); }
       }
 
-      if (timeLeft <= 120 && !colorAssistWarned) {
+      // 顏色輔助在遊戲時間過半時自動關閉
+      if (timeLeft <= Math.floor(TOTAL_GAME_TIME / 2) && !colorAssistWarned) {
           useColorCoding = false; colorAssistWarned = true;
           createFloatingText(canvas.width/2, canvas.height/2, "⚠️ 質數顏色輔助已關閉！", "#FFFF00", "30px");
       }
@@ -376,9 +418,9 @@
               else do { boss.value = Math.floor(Math.random() * 100); } while (isPrime(boss.value));
           }
       } else if (!boss.isDefeated) {
-          // 降低時間帶來的難度加速比例
-          speedMultiplier = 1 + ((180 - timeLeft) * 0.005); 
-          currentSpawnRate = Math.max(35, 80 - ((180 - timeLeft) * 0.3));
+          // 動態難度隨時間等比例增加
+          speedMultiplier = 1 + ((TOTAL_GAME_TIME - timeLeft) * 0.005); 
+          currentSpawnRate = Math.max(35, 80 - ((TOTAL_GAME_TIME - timeLeft) * 0.3));
           enemySpawnTimer--;
           if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = currentSpawnRate; }
       }
@@ -410,7 +452,15 @@
         b.x += b.dx; b.y += b.dy;
       });
       bullets = bullets.filter(b => b.y > -20 && b.x > 0 && b.x < canvas.width && b.y < canvas.height);
-      enemies = enemies.filter(e => e.y < canvas.height + 30);
+      
+      // 💡過濾敵人，同時記錄掉出底部沒打到的質數
+      enemies = enemies.filter(e => {
+          if (e.y >= canvas.height + 30) {
+              if (isPrime(e.value)) missedPrimes[e.value] = (missedPrimes[e.value] || 0) + 1;
+              return false;
+          }
+          return true;
+      });
 
       if (boss.active) {
           for (let j = bullets.length - 1; j >= 0; j--) {
@@ -427,7 +477,7 @@
                       }
                   } else {
                       createExplosion(b.x, b.y, false); createFloatingText(b.x, b.y, "免疫！", "#AAAAAA", "24px");
-                      mistakes[boss.value] = (mistakes[boss.value] || 0) + 1; // 記錄Boss非質數失誤
+                      mistakes[boss.value] = (mistakes[boss.value] || 0) + 1;
                       combo = 0; if (weapon !== 'normal') { weapon = 'normal'; weaponTimer = 0; createFloatingText(player.x, player.y - 30, "武器降級！", "#FF3B3B"); }
                       updateHUD();
                   }
@@ -453,7 +503,7 @@
                 } else {
                   let penalty = e.value === 0 ? Math.floor(score * 0.2) : e.value;
                   score = Math.max(0, score - penalty); createFloatingText(e.x, e.y, `-${penalty}`, "#FF3B3B");
-                  mistakes[e.value] = (mistakes[e.value] || 0) + 1; // 記錄小兵非質數失誤
+                  mistakes[e.value] = (mistakes[e.value] || 0) + 1; 
                   combo = 0; if (weapon !== 'normal') { weapon = 'normal'; weaponTimer = 0; createFloatingText(player.x, player.y - 30, "武器降級！", "#FF3B3B"); }
                 }
                 updateHUD();
@@ -506,8 +556,8 @@
 
     function gameLoop() {
       if (!isPlaying) return;
-      if (!isPaused) { update(); } // 暫停時不更新畫面數據
-      draw(); // 即使暫停也要維持畫面渲染
+      if (!isPaused) { update(); } 
+      draw(); 
       requestAnimationFrame(gameLoop);
     }
   </script>
