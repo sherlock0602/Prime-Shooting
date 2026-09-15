@@ -248,8 +248,13 @@
       if(e.key === ' ') isShooting = false;
     });
 
+    // 💡 新增：偵測是否為觸控設備 (避免平板點擊時觸發滑鼠移動導致瞬間移動)
+    let isTouchDevice = false;
+    window.addEventListener('touchstart', () => { isTouchDevice = true; }, { passive: true, once: true });
+
     // 滑鼠
     canvas.addEventListener('mousemove', e => {
+      if (isTouchDevice) return; // 如果偵測到觸控，就徹底停用滑鼠跟隨功能
       if (!isPlaying || joyActive) return;
       const rect = canvas.getBoundingClientRect();
       player.x = e.clientX - rect.left;
