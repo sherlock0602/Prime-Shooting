@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>✨ 質數射擊戰 ✨</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: black; overflow: hidden; height: 100%; touch-action: none; }
+    canvas { display: block; margin: 0 auto; background: black; }
+    #ui {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; justify-content: center; align-items: center; flex-direction: column;
+      background: rgba(0,0,0,0.8); color: white; font-family: sans-serif; z-index: 2;
+    }
+    #hud {
+      position: absolute; top: 10px; left: 10px;
+      color: white; font-size: 18px; display: none; z-index: 1;
+      text-shadow: 0 0 5px rgba(255,255,255,0.5);
+    }
+    .controls-info {
+      margin-top: 20px;
+      font-size: 16px;
+      text-align: center;
+    }
+    button.ui-btn { padding: 12px 24px; font-size: 24px; cursor: pointer; border-radius: 8px; border: none; background: #00E5FF; color: black; font-weight: bold; transition: 0.2s; }
+    button.ui-btn:hover { background: #00b3cc; box-shadow: 0 0 15px #00E5FF; }
+    
+    /* 触摸控制区域 */
+    .touch-controls {
+      position: absolute; bottom: 20px;
+      width: 100%;
+      display: none; /* 在平板/手機裝置才顯示 */
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 30px;
+      box-sizing: border-box;
+      z-index: 1;
+      pointer-events: none; /* 讓點擊可以穿透空白處 */
+    }
+    
+    /* 半透明虛擬搖桿 */
+    #joystick-container {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: rgba(0, 229, 255, 0.15);
+      border: 2px solid rgba(0, 229, 255, 0.5);
+      position: relative;
+      pointer-events: auto;
+    }
+    
+    #joystick-knob {
+      width: 50px; height: 50px;
+      border-radius: 50%;
+      background: rgba(0, 229, 255, 0.8);
+      box-shadow: 0 0 15px #00E5FF;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    
+    .shoot-btn {
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      background: rgba(255, 59, 59, 0.4);
+      border: 2px solid rgba(255, 59, 59, 0.8);
+      color: white; font-weight: bold; font-size: 22px;
+      pointer-events: auto;
+      box-shadow: 0 0 15px rgba(255, 59, 59, 0.5);
+    }
+    
+    .shoot-btn:active { background: rgba(255, 59, 59, 0.7); }
+    
+    .keyboard-hint {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.7); font-family: sans-serif; font-size: 14px; z-index: 1;
+    }
+    
+    .prime-stats {
+      margin-top: 15px; max-height: 250px; overflow-y: auto; padding: 10px;
+      border: 1px solid white; border-radius: 5px; width: 80%; max-width: 600px;
+    }
+    .stats-row { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 5px; }
+    .stat-item { display: flex; align-items: center; min-width: 80px; }
+    .prime-number { font-weight: bold; width: 25px; }
+    .prime-count { margin-left: 5px; padding: 2px 8px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+    .low-count { color: #FF3B3B; }
+    
+    @media (pointer: coarse) {
+      .touch-controls { display: flex !important; }
+      .keyboard-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1 style="text-shadow: 0 0 20px #00E5FF; font-size: 48px; margin-bottom: 10px;">✨ 質數射擊戰 ✨</h1>
+    <div id="endGameUI" style="display: none; text-align: center;">
+        <h2 id="finalScoreText" style="color: #FFD700; text-shadow: 0 0 10px #FFD700;">🎯 遊戲結束！你的分數：0</h2>
+        <input type="text" id="playerName" placeholder="請輸入你的名字" style="padding: 10px; font-size: 18px; margin: 10px 0; border-radius: 5px; border: none;">
+        <br>
+        <button id="submitScoreBtn" class="ui-btn" style="margin-bottom: 15px;">提交分數</button>
+    </div>
+
+    <button id="startButton" class="ui-btn">開始遊戲</button>
+     
+    <div id="leaderboard" style="margin-top: 20px; width: 80%; max-width: 400px; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px;">
+        <h3 style="text-align: center; margin-top: 0;">🏆 排行榜 🏆</h3>
+        <ol id="leaderboardList"></ol>
+    </div>
+ 
+    <div class="controls-info">
+      <p>💻 電腦：[滑鼠] 移動點擊，或 [方向鍵] 移動與 [空白鍵] 射擊</p>
+      <p>📱 平板：[左側搖桿] 全方位移動，[右側按鈕] 射擊 (可長按)</p>
+      <p>⚠️ 終極挑戰：最後30秒，巨大 Boss 降臨，只有質數時能造成傷害！</p>
+    </div>
+  </div>
+  
+  <div id="hud">
+    分數：<span id="score">0</span> ｜ Combo：<span id="combo">0</span> ｜ 武器：<span id="weaponName">普通</span> ｜ 剩餘時間：<span id="timeLeft">180</span> 秒
+  </div>
+  
+  <!-- 觸控控制區 (搖桿 + 射擊) -->
+  <div class="touch-controls">
+    <div id="joystick-container">
+        <div id="joystick-knob"></div>
+    </div>
+    <button class="shoot-btn" id="shootButton">射擊</button>
+  </div>
+  
+  <div class="keyboard-hint">
+    滑鼠/方向鍵 移動飛船 ｜ 點擊/空白鍵 射擊 (支援長按連射)
+  </div>
+  
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const ui = document.getElementById('ui');
+    const hud = document.getElementById('hud');
+    const startBtn = document.getElementById('startButton');
+    const scoreEl = document.getElementById('score');
+    const comboEl = document.getElementById('combo');
+    const weaponNameEl = document.getElementById('weaponName');
+    const timeLeftEl = document.getElementById('timeLeft');
+    const shootButton = document.getElementById('shootButton');
+    const endGameUI = document.getElementById('endGameUI');
+    const finalScoreText = document.getElementById('finalScoreText');
+    const playerNameInput = document.getElementById('playerName');
+    const submitScoreBtn = document.getElementById('submitScoreBtn');
+    const leaderboardList = document.getElementById('leaderboardList');
+    
+    const joystickArea = document.getElementById('joystick-container');
+    const joystickKnob = document.getElementById('joystick-knob');
+    const API_URL = 'http://10.196.54.156:3000/api'; 
+
+    // --- 1. 遊戲狀態與變數 ---
+    let isPlaying = false; 
+    let player = { x: window.innerWidth / 2, y: window.innerHeight - 80, r: 20, speed: 8 };
+    let bullets = []; let enemies = []; let stars = []; let particles = []; let floatingTexts = [];
+    let score = 0; let combo = 0; let isShooting = false;
+    let shootCooldown = 0; const SHOOT_RATE = 10; 
+    let weapon = 'normal'; let weaponTimer = 0; const WEAPON_DURATION = 300;
+    let gameTimer; let timeLeft = 180;
+    let useColorCoding = true; let colorAssistWarned = false;
+    let enemySpawnTimer = 0; let currentSpawnRate = 80; let speedMultiplier = 1;
+
+    let keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
+    
+    let joyActive = false;
+    let joyVector = { x: 0, y: 0 }; 
+    let joyCenter = { x: 0, y: 0 };
+    const maxJoyRadius = 40;
+
+    let boss = { active: false, x: 0, y: -100, r: 70, hp: 40, maxHp: 40, value: 0, timer: 0, dx: 3, dy: 1, isDefeated: false };
+    let primeHitCounts = {};
+    const primesUnder100 = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97];
+    
+    function initPrimeHitCounts() { primeHitCounts = {}; primesUnder100.forEach(p => primeHitCounts[p] = 0); }
+    for (let i = 0; i < 200; i++) stars.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, size: Math.random() * 2, speed: 0.5 + Math.random() * 1 });
+
+    // --- 2. Canvas 設定 ---
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      if(!isPlaying) {
+          player.x = canvas.width / 2;
+          player.y = canvas.height - 80;
+      }
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); 
+
+    // --- 排行榜 ---
+    async function submitScore() {
+        const name = playerNameInput.value.trim();
+        if (!name) return alert('請輸入你的名字！');
+        try {
+            const response = await fetch(`${API_URL}/scores`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, score: score }),
+            });
+            if (response.ok) {
+                alert('分數提交成功！');
+                submitScoreBtn.disabled = true; submitScoreBtn.textContent = '已提交';
+                await showLeaderboard();
+            } else alert('分數提交失敗，請稍後再試。');
+        } catch (error) { console.error(error); alert('無法連接到伺服器。'); }
+    }
+    async function showLeaderboard() {
+        try {
+            const response = await fetch(`${API_URL}/scores`);
+            const scores = await response.json();
+            leaderboardList.innerHTML = '';
+            if (scores.length === 0) leaderboardList.innerHTML = '<li>尚無紀錄</li>';
+            else scores.forEach(record => {
+                const li = document.createElement('li');
+                li.textContent = `${record.name}: ${record.score} 分`;
+                leaderboardList.appendChild(li);
+            });
+        } catch (error) { leaderboardList.innerHTML = '<li>無法載入排行榜</li>'; }
+    }
+
+    startBtn.addEventListener('click', startGame);
+    submitScoreBtn.addEventListener('click', submitScore);
+    document.addEventListener('DOMContentLoaded', showLeaderboard);
+
+    // --- 輸入控制綁定 (含滑鼠回歸) ---
+    // 鍵盤
+    document.addEventListener('keydown', e => {
+      if (!isPlaying) return;
+      if(keys.hasOwnProperty(e.key)) keys[e.key] = true;
+      if(e.key === ' ') { e.preventDefault(); isShooting = true; }
+    });
+    document.addEventListener('keyup', e => {
+      if(keys.hasOwnProperty(e.key)) keys[e.key] = false;
+      if(e.key === ' ') isShooting = false;
+    });
+
+    // 滑鼠 (移動與點擊)
+    canvas.addEventListener('mousemove', e => {
+      if (!isPlaying || joyActive) return;
+      const rect = canvas.getBoundingClientRect();
+      player.x = e.clientX - rect.left;
+      let targetY = e.clientY - rect.top;
+      // 限制只能在下半部活動
+      if (targetY < canvas.height / 2) targetY = canvas.height / 2;
+      player.y = targetY;
+    });
+    canvas.addEventListener('mousedown', e => { e.preventDefault(); if (isPlaying) isShooting = true; });
+    canvas.addEventListener('mouseup', e => { e.preventDefault(); isShooting = false; });
+    canvas.addEventListener('mouseleave', e => { isShooting = false; });
+
+    // 觸控按鈕
+    const setShooting = (e, val) => { e.preventDefault(); if(isPlaying) isShooting = val; };
+    shootButton.addEventListener('touchstart', e => setShooting(e, true), {passive: false});
+    shootButton.addEventListener('touchend', e => setShooting(e, false), {passive: false});
+    shootButton.addEventListener('mousedown', e => setShooting(e, true));
+    shootButton.addEventListener('mouseup', e => setShooting(e, false));
+
+    // 虛擬搖桿
+    function handleJoystickStart(e) {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        const rect = joystickArea.getBoundingClientRect();
+        joyCenter.x = rect.left + rect.width / 2;
+        joyCenter.y = rect.top + rect.height / 2;
+        joyActive = true;
+        updateJoystick(touch);
+    }
+    function handleJoystickMove(e) {
+        e.preventDefault();
+        if (joyActive) updateJoystick(e.changedTouches[0]);
+    }
+    function handleJoystickEnd(e) {
+        e.preventDefault();
+        joyActive = false; joyVector = { x: 0, y: 0 };
+        joystickKnob.style.transform = `translate(-50%, -50%)`;
+    }
+    function updateJoystick(touch) {
+        const dx = touch.clientX - joyCenter.x; const dy = touch.clientY - joyCenter.y;
+        const distance = Math.hypot(dx, dy); const angle = Math.atan2(dy, dx);
+        const clampedDist = Math.min(distance, maxJoyRadius);
+        const knobX = Math.cos(angle) * clampedDist; const knobY = Math.sin(angle) * clampedDist;
+        joystickKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+        joyVector.x = knobX / maxJoyRadius; joyVector.y = knobY / maxJoyRadius;
+    }
+    joystickArea.addEventListener('touchstart', handleJoystickStart, {passive: false});
+    joystickArea.addEventListener('touchmove', handleJoystickMove, {passive: false});
+    joystickArea.addEventListener('touchend', handleJoystickEnd, {passive: false});
+    joystickArea.addEventListener('touchcancel', handleJoystickEnd, {passive: false});
+
+    // --- 遊戲流程 ---
+    function startGame() {
+      const existingStats = document.querySelector('.prime-stats');
+      if (existingStats) existingStats.remove();
+      
+      endGameUI.style.display = 'none'; startBtn.style.display = 'none';
+      ui.style.display = 'none'; hud.style.display = 'block';
+      
+      score = 0; combo = 0; timeLeft = 180;
+      weapon = 'normal'; weaponTimer = 0;
+      bullets = []; enemies = []; particles = []; floatingTexts = [];
+      player.x = canvas.width / 2; player.y = canvas.height - 80;
+      isShooting = false; shootCooldown = 0;
+      joyActive = false; joyVector = {x:0, y:0}; joystickKnob.style.transform = `translate(-50%, -50%)`;
+      boss.active = false; boss.isDefeated = false;
+      useColorCoding = true; colorAssistWarned = false; // 重置顏色輔助
+      
+      initPrimeHitCounts();
+      updateHUD();
+      isPlaying = true;
+      
+      timerLoop();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function updateHUD() {
+        scoreEl.textContent = score; comboEl.textContent = combo;
+        weaponNameEl.textContent = weapon === 'smart' ? '智慧' : (weapon === 'homing' ? '追蹤' : '普通');
+        timeLeftEl.textContent = timeLeft;
+    }
+
+    function timerLoop() {
+      gameTimer = setInterval(() => {
+        timeLeft--;
+        updateHUD();
+        if (timeLeft === 30 && !boss.active && !boss.isDefeated) spawnBoss();
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    }
+
+    function endGame() {
+      clearInterval(gameTimer); isPlaying = false;
+      hud.style.display = 'none'; ui.style.display = 'flex';
+      endGameUI.style.display = 'block';
+      finalScoreText.innerText = `🎯 遊戲結束！你的分數：${score}`;
+      submitScoreBtn.disabled = false; submitScoreBtn.textContent = '提交分數';
+      showLeaderboard();
+    }
+
+    function shoot() {
+      bullets.push({ x: player.x, y: player.y - 15, dx: 0, dy: -10, r: 5, type: weapon, blinkState: 0, blinkTimer: 0 });
+    }
+
+    function createExplosion(x, y, isPrimeVal) {
+      const color = isPrimeVal ? '#00FF00' : '#FF3B3B';
+      for (let i = 0; i < 20; i++) particles.push({ x: x, y: y, vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10, life: 1, color: color, size: Math.random() * 4 + 1 });
+    }
+    function createFloatingText(x, y, text, color, size="20px") {
+        floatingTexts.push({ x: x, y: y, text: text, color: color, size: size, life: 1, dy: -1 });
+    }
+
+    function isPrime(n) {
+      if (n <= 1) return false; if (n === 2) return true; if (n % 2 === 0) return false;
+      for (let i = 3; i <= Math.sqrt(n); i += 2) if (n % i === 0) return false;
+      return true;
+    }
+
+    function spawnEnemy() {
+        let value, isPrimeNum;
+        if (Math.random() < 0.6) {
+          do { value = Math.floor(Math.random() * 100); } while (!isPrime(value));
+        } else {
+          do { value = Math.floor(Math.random() * 100); } while (isPrime(value));
+        }
+        enemies.push({ x: Math.random() * (canvas.width - 60) + 30, y: -30, r: 20, speed: (1.5 + Math.random() * 2) * speedMultiplier, value: value });
+    }
+
+    function spawnBoss() {
+        boss.active = true; boss.hp = boss.maxHp; boss.x = canvas.width / 2; boss.y = -100;
+        boss.value = 2; boss.timer = 0;
+        createFloatingText(canvas.width/2, canvas.height/2, "⚠️ BOSS 降臨！ ⚠️", "#FF00FF", "40px");
+        createFloatingText(canvas.width/2, canvas.height/2 + 40, "只有質數型態能造成傷害！", "#FFFFFF", "20px");
+        enemies = [];
+    }
+
+    function update() {
+      // 玩家移動 (搖桿與鍵盤) - 滑鼠已在監聽器中處理
+      if (joyActive) {
+          player.x += joyVector.x * player.speed;
+          player.y += joyVector.y * player.speed;
+      } else {
+          if (keys.ArrowLeft) player.x -= player.speed;
+          if (keys.ArrowRight) player.x += player.speed;
+          if (keys.ArrowUp) player.y -= player.speed;
+          if (keys.ArrowDown) player.y += player.speed;
+      }
+      // 邊界限制
+      if (player.x < player.r) player.x = player.r;
+      if (player.x > canvas.width - player.r) player.x = canvas.width - player.r;
+      if (player.y < canvas.height / 2) player.y = canvas.height / 2; 
+      if (player.y > canvas.height - player.r) player.y = canvas.height - player.r;
+
+      // 射擊
+      if (shootCooldown > 0) shootCooldown--;
+      if (isShooting && shootCooldown <= 0) { shoot(); shootCooldown = SHOOT_RATE; }
+
+      // 武器倒數
+      if (weapon !== 'normal') {
+          weaponTimer--;
+          if (weaponTimer <= 0) { weapon = 'normal'; if(combo>=20) combo=0; updateHUD(); }
+      }
+
+      // 顏色輔助關閉警告
+      if (timeLeft <= 120 && !colorAssistWarned) {
+          useColorCoding = false; colorAssistWarned = true;
+          createFloatingText(canvas.width/2, canvas.height/2, "⚠️ 質數顏色輔助已關閉！", "#FFFF00", "30px");
+      }
+
+      // 敵人生成與更新
+      if (boss.active) {
+          boss.x += boss.dx;
+          if (boss.x < boss.r + 20 || boss.x > canvas.width - boss.r - 20) boss.dx *= -1;
+          if (boss.y < 120) boss.y += 2; else boss.y += Math.sin(Date.now() / 400) * 0.8; 
+
+          boss.timer++;
+          if (boss.timer > 60) {
+              boss.timer = 0;
+              let isPrimeNext = Math.random() < 0.5;
+              if (isPrimeNext) do { boss.value = Math.floor(Math.random() * 100); } while (!isPrime(boss.value));
+              else do { boss.value = Math.floor(Math.random() * 100); } while (isPrime(boss.value));
+          }
+      } else if (!boss.isDefeated) {
+          speedMultiplier = 1 + ((180 - timeLeft) * 0.008); 
+          currentSpawnRate = Math.max(25, 80 - ((180 - timeLeft) * 0.4));
+          enemySpawnTimer--;
+          if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = currentSpawnRate; }
+      }
+
+      stars.forEach(s => { s.y += s.speed; if (s.y > canvas.height) s.y = 0; });
+      particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; });
+      particles = particles.filter(p => p.life > 0);
+      floatingTexts.forEach(ft => { ft.y += ft.dy; ft.life -= 0.015; });
+      floatingTexts = floatingTexts.filter(ft => ft.life > 0);
+
+      // ★修復：確保敵人會往下掉
+      enemies.forEach(e => e.y += e.speed);
+      
+      bullets.forEach(b => {
+        b.blinkTimer++; if (b.blinkTimer % 5 === 0) b.blinkState = (b.blinkState + 1) % 2;
+        let targetList = boss.active ? [{x: boss.x, y: boss.y, value: boss.value, isBoss: true}] : enemies;
+        if (b.type === 'homing') {
+            let targets = targetList.filter(e => isPrime(e.value));
+            if (targets.length > 0) {
+              let t = targets[0]; 
+              let angle = Math.atan2(t.y - b.y, t.x - b.x);
+              b.dx = Math.cos(angle) * 10; b.dy = Math.sin(angle) * 10;
+            }
+        } else if (b.type === 'smart') {
+            let isTargetPrime = targetList.length > 0 && isPrime(targetList[0].value);
+            if (!isTargetPrime && targetList.length > 0) {
+                if (Math.hypot(targetList[0].x - b.x, targetList[0].y - b.y) < (targetList[0].isBoss ? 150 : 60)) {
+                   let avoidAngle = Math.atan2(b.y - targetList[0].y, b.x - targetList[0].x);
+                   b.dx = Math.cos(avoidAngle) * 6; b.dy = -8;
+                }
+            } else if (isTargetPrime) {
+                let angle = Math.atan2(targetList[0].y - b.y, targetList[0].x - b.x);
+                b.dx = Math.cos(angle) * 9; b.dy = Math.sin(angle) * 9;
+            }
+        }
+        b.x += b.dx; b.y += b.dy;
+      });
+      bullets = bullets.filter(b => b.y > -20 && b.x > 0 && b.x < canvas.width && b.y < canvas.height);
+      enemies = enemies.filter(e => e.y < canvas.height + 30);
+
+      if (boss.active) {
+          for (let j = bullets.length - 1; j >= 0; j--) {
+              const b = bullets[j];
+              if (Math.hypot(b.x - boss.x, b.y - boss.y) < boss.r + b.r) {
+                  bullets.splice(j, 1);
+                  if (isPrime(boss.value)) {
+                      createExplosion(b.x, b.y, true); boss.hp--; score += boss.value; combo++; updateHUD();
+                      if (boss.hp <= 0) {
+                          boss.active = false; boss.isDefeated = true; score += 10000;
+                          createExplosion(boss.x, boss.y, true); createExplosion(boss.x-20, boss.y+20, true);
+                          createFloatingText(canvas.width/2, canvas.height/2, "✨ BOSS 擊破! +10000 ✨", "#FFD700", "40px");
+                          setTimeout(endGame, 2500);
+                      }
+                  } else {
+                      createExplosion(b.x, b.y, false); createFloatingText(b.x, b.y, "免疫！", "#AAAAAA", "24px");
+                      combo = 0; 
+                      if (weapon !== 'normal') { weapon = 'normal'; weaponTimer = 0; createFloatingText(player.x, player.y - 30, "武器降級！", "#FF3B3B"); }
+                      updateHUD();
+                  }
+              }
+          }
+      }
+
+      if (!boss.active) {
+          for (let i = enemies.length - 1; i >= 0; i--) {
+            const e = enemies[i];
+            for (let j = bullets.length - 1; j >= 0; j--) {
+              const b = bullets[j];
+              if (b.type === 'smart' && !isPrime(e.value)) continue;
+              if (Math.hypot(b.x - e.x, b.y - e.y) < e.r + b.r) {
+                bullets.splice(j, 1); enemies.splice(i, 1);
+                let isP = isPrime(e.value);
+                createExplosion(e.x, e.y, isP);
+                if (isP) {
+                  score += e.value; combo++;
+                  createFloatingText(e.x, e.y, `+${e.value}`, "#00FF00");
+                  if (primeHitCounts.hasOwnProperty(e.value)) primeHitCounts[e.value]++;
+                  if (combo >= 20 && weapon !== 'smart') { weapon = 'smart'; weaponTimer = WEAPON_DURATION; createFloatingText(player.x, player.y - 30, "智慧彈！", "#00FFFF"); } 
+                  else if (combo >= 10 && weapon === 'normal') { weapon = 'homing'; weaponTimer = WEAPON_DURATION; createFloatingText(player.x, player.y - 30, "追蹤彈！", "#FF00FF"); }
+                  else if (weapon !== 'normal') weaponTimer = WEAPON_DURATION; 
+                } else {
+                  let penalty = e.value === 0 ? Math.floor(score * 0.2) : e.value;
+                  score = Math.max(0, score - penalty);
+                  createFloatingText(e.x, e.y, `-${penalty}`, "#FF3B3B");
+                  combo = 0;
+                  if (weapon !== 'normal') { weapon = 'normal'; weaponTimer = 0; createFloatingText(player.x, player.y - 30, "武器降級！", "#FF3B3B"); }
+                }
+                updateHUD();
+                break;
+              }
+            }
+          }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'white'; stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
+
+      particles.forEach(p => {
+          ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+
+      ctx.save(); ctx.translate(player.x, player.y);
+      ctx.shadowBlur = 15; ctx.shadowColor = '#00E5FF'; ctx.fillStyle = '#00E5FF';
+      ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(15, 20); ctx.lineTo(-15, 20); ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      if (weapon !== 'normal') {
+          ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(player.x - 20, player.y + 25, 40, 4);
+          ctx.fillStyle = weapon === 'smart' ? '#00FFFF' : '#FF00FF';
+          ctx.fillRect(player.x - 20, player.y + 25, 40 * (weaponTimer / WEAPON_DURATION), 4);
+      }
+
+      bullets.forEach(b => {
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        if(b.type === 'homing') { ctx.fillStyle = '#FF00FF'; ctx.shadowColor = '#FF00FF'; } 
+        else if(b.type === 'smart') { ctx.fillStyle = b.blinkState ? '#00FFFF' : '#FFFF00'; ctx.shadowColor = ctx.fillStyle; } 
+        else { ctx.fillStyle = '#FFD700'; ctx.shadowColor = '#FFD700'; }
+        ctx.shadowBlur = 10; ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+
+      if (boss.active) {
+          const isBossPrime = isPrime(boss.value);
+          const bossColor = isBossPrime ? '#00FF00' : '#FF3B3B';
+          
+          ctx.shadowBlur = 30; ctx.shadowColor = bossColor; ctx.fillStyle = 'rgba(0,0,0,0.8)';
+          ctx.beginPath(); ctx.arc(boss.x, boss.y, boss.r, 0, Math.PI * 2); ctx.fill();
+          ctx.lineWidth = 5; ctx.strokeStyle = bossColor; ctx.stroke();
+          
+          ctx.shadowBlur = 0; ctx.fillStyle = bossColor;
+          ctx.font = 'bold 48px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(boss.value, boss.x, boss.y);
+          
+          const hpWidth = 100;
+          ctx.fillStyle = 'rgba(255,0,0,0.5)'; ctx.fillRect(boss.x - hpWidth/2, boss.y - boss.r - 20, hpWidth, 10);
+          ctx.fillStyle = '#00FF00'; ctx.fillRect(boss.x - hpWidth/2, boss.y - boss.r - 20, hpWidth * (boss.hp / boss.maxHp), 10);
+      }
+
+      enemies.forEach(e => {
+        let isP = isPrime(e.value);
+        let color = useColorCoding ? (isP ? '#00FF00' : '#FF3B3B') : '#FF3B3B'; // 支援關閉顏色輔助
+        ctx.shadowBlur = 15; ctx.shadowColor = color; ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.fillStyle = 'black';
+        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(e.value, e.x, e.y);
+      });
+
+      floatingTexts.forEach(ft => {
+          ctx.globalAlpha = ft.life; ctx.fillStyle = ft.color;
+          ctx.shadowBlur = 5; ctx.shadowColor = 'black';
+          ctx.font = `bold ${ft.size} Arial`; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y);
+      });
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    }
+
+    function gameLoop() {
+      if (!isPlaying) return;
+      update(); draw();
+      requestAnimationFrame(gameLoop);
+    }
+  </script>
+</body>
+</html>
